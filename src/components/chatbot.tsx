@@ -1,17 +1,20 @@
 'use client';
 
 import { useChatStore } from '@/store/chat-store';
+import { useInitStore } from '@/store/init-store';
 import { useRef, useEffect } from 'react';
+import Markdown from 'react-markdown';
 
 export default function ChatBot() {
   const { messages, input, isLoading, addMessage, setInput, setIsLoading, clearMessages } =
     useChatStore();
+  const dataInitialized = useInitStore((state) => state.initialized);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!input.trim()) return;
+    if (!input.trim() || !dataInitialized) return;
 
     // 사용자 메시지 추가
     addMessage({ content: input, role: 'user' });
@@ -21,15 +24,16 @@ export default function ChatBot() {
     try {
       // 여기에 실제 API 호출 로직 추가
       // 예시: const response = await fetch('/api/chat', { method: 'POST', body: JSON.stringify({ message: input }) });
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ message: input }),
+      });
 
-      // 임시 응답 (실제 구현 시 API 응답으로 대체)
-      setTimeout(() => {
-        addMessage({
-          content: `이것은 "${input}"에 대한 응답입니다.`,
-          role: 'assistant',
-        });
-        setIsLoading(false);
-      }, 1000);
+      addMessage({
+        content: (await res.json()).answer,
+        role: 'assistant',
+      });
+      setIsLoading(false);
     } catch (error) {
       console.error('Error sending message:', error);
       setIsLoading(false);
@@ -70,7 +74,9 @@ export default function ChatBot() {
                 className={`max-w-[80%] rounded-lg px-4 py-2 ${
                   message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'
                 }`}>
-                <p>{message.content}</p>
+                <div>
+                  <Markdown>{message.content}</Markdown>
+                </div>
                 <div className="mt-1 text-xs opacity-70">
                   {message.timestamp.toLocaleTimeString()}
                 </div>
@@ -105,11 +111,11 @@ export default function ChatBot() {
             onChange={(e) => setInput(e.target.value)}
             placeholder="메시지를 입력하세요..."
             className="flex-1 rounded-full border px-4 py-2 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            disabled={isLoading}
+            disabled={!dataInitialized || isLoading}
           />
           <button
             type="submit"
-            disabled={isLoading || !input.trim()}
+            disabled={!dataInitialized || isLoading || !input.trim()}
             className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 p-2 text-white disabled:opacity-50">
             <svg
               xmlns="http://www.w3.org/2000/svg"
