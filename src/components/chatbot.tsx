@@ -4,6 +4,7 @@ import { useChatStore } from '@/store/chat-store';
 import { useInitStore } from '@/store/init-store';
 import { useRef, useEffect } from 'react';
 import Markdown from 'react-markdown';
+import clsx from 'clsx';
 
 export default function ChatBot() {
   const { messages, input, isLoading, addMessage, setInput, setIsLoading, clearMessages } =
@@ -67,13 +68,15 @@ export default function ChatBot() {
           messages.map((message) => (
             <div
               key={message.id}
-              className={`mb-4 ${
-                message.role === 'user' ? 'flex justify-end' : 'flex justify-start'
-              }`}>
+              className={clsx(
+                'mb-4',
+                message.role === 'user' ? 'flex justify-end' : 'flex justify-start',
+              )}>
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 ${
-                  message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'
-                }`}>
+                className={clsx(
+                  'max-w-[80%] rounded-lg px-4 py-2',
+                  message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800',
+                )}>
                 <div>
                   <Markdown>{message.content}</Markdown>
                 </div>

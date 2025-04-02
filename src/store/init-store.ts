@@ -8,8 +8,8 @@ interface InitState {
 }
 
 export const useInitStore = create<InitState>((set) => ({
-  initialized: false,
-  isSubmitting: false,
+  initialized: true,
+  isSubmitting: true,
   check: async () => {
     set({ isSubmitting: true });
     const res = await fetch('/api/init', {
@@ -25,9 +25,11 @@ export const useInitStore = create<InitState>((set) => ({
     set({ initialized: false, isSubmitting: false });
   },
   init: async () => {
+    set({ isSubmitting: true });
     const res = await fetch('/api/init', {
       method: 'POST',
     });
+    set({ isSubmitting: false });
     if (res.ok) {
       set({ initialized: true });
     } else {
