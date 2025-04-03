@@ -1,2 +1,6 @@
 onlyBuiltDependencies:
+  - onnxruntime-node
+  - protobufjs
   - sharp
+overrides:
+  '@langchain/core': $@langchain/core

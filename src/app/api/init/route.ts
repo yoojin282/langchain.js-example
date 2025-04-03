@@ -24,7 +24,11 @@ export async function POST() {
     const docs = await loadPdf(fileName, { textSplitter });
     console.log(`파일경로: ${fileName}, Document 갯수: ${docs.length}`);
 
-    await vectorstore.addDocuments(docs);
+    try {
+      await vectorstore.addDocuments(docs);
+    } catch (error) {
+      console.error(`벡터 저장 실패: ${fileName}`, error);
+    }
   }
 
   console.log('벡터 저장 완료');
