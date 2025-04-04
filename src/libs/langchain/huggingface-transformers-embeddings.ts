@@ -1,3 +1,5 @@
+// 로컬 모델 돌릴때 사용
+
 import { FeatureExtractionPipelineOptions, PretrainedOptions } from '@huggingface/transformers';
 import { Embeddings, type EmbeddingsParams } from '@langchain/core/embeddings';
 import { chunkArray } from '@langchain/core/utils/chunk_array';

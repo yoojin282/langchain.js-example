@@ -15,8 +15,9 @@ export async function POST() {
     return new NextResponse('벡터가 존재합니다. 데이터를 로드하지 않습니다.', { status: 200 });
   }
   const textSplitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 300,
-    chunkOverlap: 20,
+    chunkSize: 400,
+    chunkOverlap: 40,
+    separators: ['\n\n'],
   });
   // Get PDF files from the specified directory
   const fileNames = await getFileNames(process.env.PDF_DATA_PATH || '');

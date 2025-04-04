@@ -4,58 +4,35 @@ import chatModel from '@/libs/langchain/chat-model';
 import { Document } from 'langchain/document';
 import { vectorstore } from '@/libs/langchain/vectorstore';
 import { Annotation, StateGraph } from '@langchain/langgraph';
+import { CommaSeparatedListOutputParser } from '@langchain/core/output_parsers';
 
-const PROMPT_TEMPLATE = `당신은 한일네트웍스의 인사담당자입니다.
-주어진 문맥에 대하여 아래 주의사항을 유의하여 사용자의 질문에 대답해주세요.
-1. 문맥이 없거나 알맞은 답변을 찾기 어려우면 모른다고 대답해주세요. 
-2. 가능하다면 100자 이내로 대답해주세요.
-3. 답변은 한국어로 대답하세요.
+const RERANK_TEMPLATE = `아래 문맥은 질문에 대한 임의의 답변들이다. 
+질문에 부합하는 답변 순으로 정렬해서 콤마로 구분하여 답하세요. 
+
+질문: {question}
+예상답변:
+{context}
+
+`;
+
+const PROMPT_TEMPLATE = `Use the following pieces of context to answer the question at the end.
+If you don't know the answer, just say that you don't know, don't try to make up an answer.
+Use three sentences maximum and keep the answer as concise as possible.
+Always say "thanks for asking!" at the end of the answer in Korean.
+
+
+{context}
 
 Question: {question}
-Context: {context}
-Answer:`;
+
+Helpful Answer:`;
 
 export async function POST(request: NextRequest) {
   const { message } = await request.json();
 
-  const prompt = ChatPromptTemplate.fromTemplate(PROMPT_TEMPLATE);
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const InputStateAnnotation = Annotation.Root({
-    question: Annotation<string>,
-  });
-  const StateAnnotation = Annotation.Root({
-    question: Annotation<string>,
-    context: Annotation<Document[]>,
-    answer: Annotation<string>,
-  });
-
-  const retrieve = async (state: typeof InputStateAnnotation.State) => {
-    const docs = await vectorstore.similaritySearch(state.question, 5);
-    return { context: docs };
-  };
-
-  const generate = async (state: typeof StateAnnotation.State) => {
-    const contents = state.context.map((doc) => doc.pageContent).join('\n');
-    const messages = await prompt.invoke({
-      question: state.question,
-      context: contents,
-    });
-    const response = await chatModel.invoke(messages);
-    return { answer: response.content };
-  };
-
-  const graph = new StateGraph(StateAnnotation)
-    .addNode('retrieve', retrieve)
-    .addNode('generate', generate)
-    .addEdge('__start__', 'retrieve')
-    .addEdge('retrieve', 'generate')
-    .addEdge('generate', '__end__')
-    .compile();
-
   const result = await graph.invoke({ question: message });
   console.log('검색어: ', result.question);
-  console.log('검색결과: ', result.context);
+  // console.log('검색결과: ', result.context);
 
   return NextResponse.json({
     answer: result.answer,
@@ -72,3 +49,81 @@ export async function POST(request: NextRequest) {
   //   },
   // });
 }
+
+const prompt = ChatPromptTemplate.fromTemplate(PROMPT_TEMPLATE);
+const rerankPrompt = ChatPromptTemplate.fromTemplate(RERANK_TEMPLATE);
+// const prompt = ChatPromptTemplate.fromMessages([
+//   ['system', SYSTEM_TEMPLATE],
+//   ['human', '{question}'],
+// ]);
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const InputStateAnnotation = Annotation.Root({
+  question: Annotation<string>,
+});
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const RerankStateAnnotation = Annotation.Root({
+  question: Annotation<string>,
+  context: Annotation<Document[]>,
+});
+
+const StateAnnotation = Annotation.Root({
+  question: Annotation<string>,
+  context: Annotation<Document[]>,
+  answer: Annotation<string>,
+});
+
+const retrieve = async (state: typeof InputStateAnnotation.State) => {
+  const docs = await vectorstore.maxMarginalRelevanceSearch(state.question, {
+    k: 5,
+    lambda: 0.6,
+  });
+  return {
+    context: docs.map((doc) => ({
+      ...doc,
+      pageContent: doc.pageContent
+        .replaceAll('  ', ' ')
+        .replaceAll(
+          `
+`,
+          ' ',
+        )
+        .replaceAll('\n', ' ')
+        .replaceAll('\r', ' ')
+        .replaceAll('\r\n', ' '),
+    })),
+  };
+};
+
+const rerank = async (state: typeof RerankStateAnnotation.State) => {
+  const chain = rerankPrompt.pipe(chatModel).pipe(new CommaSeparatedListOutputParser());
+  const result = await chain.invoke({
+    question: state.question,
+    context: state.context.map((doc) => doc.pageContent).join('\n'),
+  });
+  console.log('Rerank 결과: ', result);
+  const sortedDocs = result.map((index) => state.context[Number(index)]);
+  console.log('Rerank 결과: ', sortedDocs);
+  return { context: sortedDocs };
+};
+
+const generate = async (state: typeof StateAnnotation.State) => {
+  const contents = state.context.map((doc) => doc.pageContent).join('\n');
+  const messages = await prompt.invoke({
+    question: state.question,
+    context: contents,
+  });
+  const response = await chatModel.invoke(messages);
+  return { answer: response.content };
+};
+
+const graph = new StateGraph(StateAnnotation)
+  .addNode('retrieve', retrieve)
+  .addNode('rerank', rerank)
+  .addNode('generate', generate)
+  .addEdge('__start__', 'retrieve')
+  .addEdge('retrieve', 'rerank')
+  .addEdge('rerank', 'generate')
+  .addEdge('generate', '__end__')
+  .compile();
